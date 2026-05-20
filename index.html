@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'><path d='M5 19.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM20.25 5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z'/><path fill-rule='evenodd' d='M4.25 3a.75.75 0 0 1 .75.75v14.5h14.5a.75.75 0 0 1 0 1.5H4.25a.75.75 0 0 1-.75-.75V3.75A.75.75 0 0 1 4.25 3Z' clip-rule='evenodd'/><path d='M7.5 14.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75v-3.5ZM12.75 9.75a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v8a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75v-8ZM18 6.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v11.5a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75V6.25Z'/></svg>">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全球资产全景量化看板 (52etf/美股/Crypto)</title>
+    <!-- 引入 Tailwind CSS 打造现代化暗黑 UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 强行锁死外层容器与所有内嵌 Iframe / TradingView 内部生成的多层嵌套 div */
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 100% !important;
+            width: 100% !important;
+            background-color: #0d1117;
+            overflow: hidden;
+        }
+
+        #view-container, 
+        .tradingview-widget-container, 
+        .tradingview-widget-container div,
+        iframe {
+            width: 100% !important;
+            height: 100% !important;
+            border: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: block !important;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col text-gray-200">
+
+    <!-- 顶部导航栏 -->
+    <header class="bg-[#161b22] border-b border-gray-800 px-6 py-3 flex flex-wrap justify-between items-center gap-4 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
+            <h1 class="text-lg font-bold tracking-wide text-white">全球资产大盘云图看板</h1>
+        </div>
+        
+        <!-- 核心选项卡按钮组 -->
+        <div class="flex bg-[#0d1117] p-1 rounded-xl border border-gray-800">
+            <button id="btn-ashare" onclick="switchTab('ashare')" 
+                class="tab-btn px-5 py-2 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2">
+                🇨🇳 52etf 行业热力图
+            </button>
+            <button id="btn-nasdaq" onclick="switchTab('nasdaq')" 
+                class="tab-btn px-5 py-2 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2">
+                🇺🇸 美股标普500云图
+            </button>
+            <button id="btn-crypto" onclick="switchTab('crypto')" 
+                class="tab-btn px-5 py-2 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2">
+                🪙 Crypto 泡泡图
+            </button>
+        </div>
+
+        <!-- 辅助工具栏 -->
+        <div class="text-xs text-gray-400 flex items-center gap-4">
+            <button onclick="refreshCurrentTab()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-md transition-colors">
+                🔄 强制刷新
+            </button>
+            <span id="update-time">初始化中...</span>
+        </div>
+    </header>
+
+    <!-- 主渲染视窗 -->
+    <main class="flex-1 w-full bg-[#0d1117] relative overflow-hidden">
+        <div id="view-container" class="w-full h-full">
+            <!-- 视图将在这里被实时渲染 -->
+        </div>
+    </main>
+
+    <script>
+        let currentTab = '';
+
+        const mapConfigs = {
+            ashare: (container) => {
+                // 52etf A股热力图 (Iframe 嵌套)
+                const iframe = document.createElement('iframe');
+                iframe.src = "https://52etf.site/";
+                iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-popups allow-forms');
+                container.appendChild(iframe);
+            },
+            nasdaq: (container) => {
+                // 【核心修正】使用官方唯一受支持的有效美股大盘参数："SPX500"
+                const widgetDiv = document.createElement('div');
+                widgetDiv.className = 'tradingview-widget-container';
+                widgetDiv.style.width = '100%';
+                widgetDiv.style.height = '100%';
+                widgetDiv.innerHTML = '<div class="tradingview-widget-container__widget" style="width:100%;height:100%;"></div>';
+                container.appendChild(widgetDiv);
+
+                const script = document.createElement('script');
+                script.src = "https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js";
+                script.type = "text/javascript";
+                script.async = true;
+                // 这里的 "SPX500" 是硬编码的官方合法参数，绝不会报错
+                script.innerHTML = JSON.stringify({
+                    "exchanges": [],
+                    "dataSource": "SPX500",
+                    "grouping": "sector",
+                    "blockSize": "market_cap_basic",
+                    "blockColor": "change",
+                    "locale": "zh_CN",
+                    "symbolUrl": "",
+                    "colorTheme": "dark",
+                    "hasTopBar": true,
+                    "isDataSetEnabled": true,
+                    "isZoomEnabled": true,
+                    "hasSymbolTooltip": true,
+                    "width": "100%",
+                    "height": "100%"
+                });
+                widgetDiv.querySelector('.tradingview-widget-container__widget').appendChild(script);
+            },
+            crypto: (container) => {
+                // Crypto Bubbles (Iframe 嵌套)
+                const iframe = document.createElement('iframe');
+                iframe.src = "https://cryptobubbles.net/";
+                iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
+                iframe.setAttribute('allowfullscreen', 'true');
+                container.appendChild(iframe);
+            }
+        };
+
+        function switchTab(tabId) {
+            if (currentTab === tabId) return;
+            currentTab = tabId;
+
+            // 1. 更新按钮状态
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-indigo-600', 'text-white', 'shadow-lg', 'shadow-indigo-500/20');
+                btn.classList.add('text-gray-400', 'hover:text-gray-200', 'hover:bg-gray-800/50');
+            });
+            const activeBtn = document.getElementById(`btn-${tabId}`);
+            activeBtn.classList.remove('text-gray-400', 'hover:text-gray-200', 'hover:bg-gray-800/50');
+            activeBtn.classList.add('bg-indigo-600', 'text-white', 'shadow-lg', 'shadow-indigo-500/20');
+
+            // 2. 清空并重新加载对应的视图，释放旧节点内存
+            const container = document.getElementById('view-container');
+            container.innerHTML = '';
+
+            if (mapConfigs[tabId]) {
+                mapConfigs[tabId](container);
+            }
+
+            updateClock();
+        }
+
+        function refreshCurrentTab() {
+            if (!currentTab) return;
+            const container = document.getElementById('view-container');
+            container.innerHTML = '';
+            mapConfigs[currentTab](container);
+            updateClock();
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('update-time').innerText = `最近同步: ${now.toLocaleTimeString()}`;
+        }
+
+        // 默认加载 52etf
+        window.onload = () => {
+            switchTab('ashare');
+        };
+    </script>
+</body>
+</html>
